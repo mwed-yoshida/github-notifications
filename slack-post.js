@@ -5,39 +5,42 @@ var SLACK_USERNAME = 'Github未読かも〜 ';
 var SLACK_ICON_EMOJI = ':eyes:';
 
 var DAY_OF_THE_WEEK =  ['日', '月', '火', '水', '木', '金', '土'];
-var GITHUB_ACCESS_TOKEN = ScriptProperties.getProperty('GITHUB_ACCESS_TOKEN');
-var SLACK_INCOMING_WEBHOOK_URL = ScriptProperties.getProperty('SLACK_INCOMING_WEBHOOK_URL');
-var SLACK_POSTED_DESTINATION_CHANNEL = ScriptProperties.getProperty('SLACK_POSTED_DESTINATION_CHANNEL');
+var GITHUB_ACCESS_TOKEN = PropertiesService.getScriptProperties().getProperty('GITHUB_ACCESS_TOKEN');
+var SLACK_INCOMING_WEBHOOK_URL = PropertiesService.getScriptProperties().getProperty('SLACK_INCOMING_WEBHOOK_URL');
+var MAXIMUM_POSTS_NUMBER = 10;
 
 function run() {
   if (!beRun()) return;
 
-  var slack = new Slack({ 
-    incoming_webhook_url: SLACK_INCOMING_WEBHOOK_URL,
-    username: SLACK_USERNAME,
-    icon_emoji: SLACK_ICON_EMOJI,
-  });
-
   var github = new Github(GITHUB_ACCESS_TOKEN);
   github.fetchNotifications();
 
-  var postText = '';
+  var postsText = makePostsText(github, MAXIMUM_POSTS_NUMBER);
+
+  if (postsText !== '') {
+    var slack = new Slack({
+      incoming_webhook_url: SLACK_INCOMING_WEBHOOK_URL,
+      username: SLACK_USERNAME,
+      icon_emoji: SLACK_ICON_EMOJI,
+    });
+    slack.postByIncomingWebHook({
+      text: postsText,
+    });
+  }
+}
+
+function makePostsText(github, maximumPostsNumber) {
+  var postsText = '';
   while (github.hasNext()) {
     var record = github.next();
     var updatedAt = String(record.updated_at).split(/T/)[0];
-    postText += ':information_desk_person: ' + updatedAt + ' ' + record.subject.title + "\n"
-      + '[' + record.repository.name + '] '
-      + github.subjectUrl(record)
-      + '\n\n';
-    if (github.index + 1 >= 10) break;
+    postsText += ':information_desk_person: ' + updatedAt + ' ' + record.subject.title + "\n"
+    + '[' + record.repository.name + '] '
+    + github.subjectUrl(record)
+    + '\n\n';
+    if (github.index + 1 >= maximumPostsNumber) break;
   }
-
-  if (postText !== '') {
-    slack.postByIncomingWebHook({
-      channel: SLACK_POSTED_DESTINATION_CHANNEL,
-      text: postText,
-    });
-  }
+  return postsText;
 }
 
 function beRun() {
@@ -127,7 +130,7 @@ Github.prototype.next = function() {
 Github.prototype.subjectUrl = function(record) {
   var url = this.CONST.BASE_URL + record.repository.full_name + '/';
 
-  var type = '';  
+  var type = '';
   switch(record.subject.type) {
     case 'Issue':
       type = 'issues';
@@ -146,4 +149,3 @@ Github.prototype.subjectUrl = function(record) {
   }
   return url;
 };
-
